@@ -84,20 +84,6 @@ class FIRControlComponent:
         return y_current
 
 
-class Integrator:
-    """Backward Euler integrator for KE/(sTE)"""
-
-    def __init__(self, gain, time_const):
-        self.gain = gain
-        self.time_const = time_const
-        self.y_prev = 0.0
-
-    def update(self, x_current):
-        y_current = self.y_prev + (self.gain * dt / self.time_const) * x_current
-        self.y_prev = y_current
-        return y_current
-
-
 # Initialize components with noise generator
 noise_gen = SinusoidalNoiseGenerator(
     steps=steps,
@@ -114,14 +100,14 @@ regulator_ka = IIRControlComponent(a1=KA, a2=0, b1=1, b2=TA)
 regulator_ta1 = IIRControlComponent(a1=1, a2=0, b1=1, b2=TA1)
 stabilizer = IIRControlComponent(a1=0, a2=KF, b1=1, b2=TF)
 fir_filter = FIRControlComponent(b0=0.7, b1=0.3)
-exciter = Integrator(KE, TE)
+exciter = IIRControlComponent(a1=KE, a2=0, b1=0, b2=TE)
 
 # Storage for visualization
 time = []
 results = {
     'filter_out': [],
     'reg_ka_out': [],
-    'reg_ta1_out': [],
+    'vr_sat_out': [],
     'stabilizer_out': [],
     'exciter_out': [],
     'fir_out': [],
@@ -156,6 +142,7 @@ for k in range(steps):
 
     # 7. Exciter
     y_exciter = exciter.update(feedback)
+    print(y_exciter)
 
     # 8. Stabilizer
     y_stabilizer = stabilizer.update(y_exciter)
@@ -169,7 +156,7 @@ for k in range(steps):
     time.append(k * dt)
     results['filter_out'].append(y_filter)
     results['reg_ka_out'].append(y_reg_ka)
-    results['reg_ta1_out'].append(y_reg_ta1)
+    results['vr_sat_out'].append(vr_sat)
     results['stabilizer_out'].append(y_stabilizer)
     results['exciter_out'].append(y_exciter)
     results['fir_out'].append(y_fir)
@@ -178,14 +165,17 @@ for k in range(steps):
 # Plot results
 plt.figure(figsize=(12, 8))
 plt.plot(time, results['noise'], ':', alpha=0.7, label='Input Noise (15%)')
-plt.plot(time, results['exciter_out'], label='Exciter Output (E_FD)')
-plt.plot(time, results['filter_out'], '--', label='1st Filter Output')
-plt.plot(time, results['reg_ka_out'], '-.', label='Regulator KA')
-plt.plot(time, results['stabilizer_out'], ':', label='Stabilizer')
-plt.plot(time, results['fir_out'], '-', label='FIR Output (b0=0.7, b1=0.3)')
-plt.title('Control System Response with Noisy Step Input')
+plt.plot(time, results['exciter_out'], label='Exciter: KE/(sTE) Output (E_FD)')             # Exciter: KE/(sTE)
+plt.plot(time, results['filter_out'], '--', label='Filter: 1/(1+sTR) Output')               # Filter: 1/(1+sTR)
+plt.plot(time, results['reg_ka_out'], '-.', label='Regulator: KA/(1+sTA) Output')           # Regulator: KA/(1+sTA)
+plt.plot(time, results['vr_sat_out'], '-', label='vr_sat Output (LIMITER)')                 # Limiter
+plt.plot(time, results['stabilizer_out'], ':', label='Stabilizer: sKF/(1+sTF) Output')      # Stabilizer: sKF/(1+sTF)
+plt.plot(time, results['fir_out'], '-', label='FIR : SE + KE Output (b0=0.7, b1=0.3)')      # FIR : SE + KE
+plt.title('BPA EA - Control System Response with Noisy Step Input')
 plt.xlabel('Time (s)')
 plt.ylabel('Amplitude')
 plt.grid(True)
 plt.legend()
 plt.show()
+
+
